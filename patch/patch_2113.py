@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Snipaste 2.11.3 x64 验签补丁（特征码定位, 唯一命中, 自动备份）
 
-用法: 修改下方 EXE 路径后直接运行; 依赖 pip install pefile
+用法: python patch_2113.py [Snipaste.exe 路径]; 缺省用下方 EXE; 依赖 pip install pefile
 
 定位目标(按官方 2.11.3 x64 逆向定位, 见 docs/analysis.md):
   VA 0x14024B880
@@ -16,7 +16,7 @@ import sys
 
 import pefile
 
-EXE = r"Snipaste-2.11.3-x64\Snipaste.exe"   # ← 按需修改
+EXE = sys.argv[1] if len(sys.argv) > 1 else r"Snipaste-2.11.3-x64\Snipaste.exe"
 PATTERN = bytes.fromhex("0FB6D84C896C2448488D05")
 REPL = b"\xB3\x01\x90"
 

@@ -95,9 +95,41 @@ MachineUniqueId 来源：`HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid`（�
 设备码展示形式（UI 上那个 `3-6FFHY-...`）与 machineid 是**两种形态**，展示码机器段
 `blake2s('Snipaste 2'+'1'+MachineGuid)[-4:]` 可用于人工核对算法对齐（本项目实测一致）。
 
+## 依赖说明
+
+补丁后的 `Snipaste.exe` 只是二进制改动，运行时**不需要** Python 或任何第三方包；下面的依赖都只装在
+生成端（跑脚本的机器）。按脚本对照：
+
+| 脚本 | 用途 | 需要安装 | 安装命令 |
+|---|---|---|---|
+| `keygen/kg_standalone.py` | 注册机（零依赖版，推荐） | 无，纯标准库 | — |
+| `keygen/kg.py` | 注册机（PyNaCl 版，与上等价） | `pynacl` | `pip install pynacl` |
+| `patch/patch_2113.py` | 特征码打补丁 | `pefile` | `pip install pefile` |
+| `e2e/activate_auto.py` | UI 自动化全流程（可选） | `pywinauto` `pywin32` `pillow` | `pip install pywinauto pywin32 pillow` |
+
+- **两个注册机二选一**：命令行参数、授权码结构、`[模拟客户端 validate]` 自检逻辑一致（实测两者都输出
+  `validate = 0 (OK)`）。`kg_standalone.py` 内嵌 RFC 8032 纯 Python Ed25519 实现，干净机器上直接
+  `python kg_standalone.py` 就能跑；用 PyInstaller 打包单文件时也不需要额外依赖或 hook。
+- `pynacl` 只被 `kg.py` 用到（`from nacl.signing import SigningKey`），`kg_standalone.py` 不 import
+  任何第三方模块；`pefile` 只用来解析 PE 头/节表把文件偏移换算成 VA，补丁动作本身是纯字节替换。
+- `pywinauto` 会由 pip 自动带上 `comtypes`、`pywin32`、`six`；`pywin32` 提供 `win32clipboard` /
+  `win32con`（把授权码写进剪贴板）；`pillow` 只在最后的 `ImageGrab` 截图取证用，不想装可删掉
+  `e2e/activate_auto.py` 里生成 `activated.png` 的那两行。
+- 标准库部分（无需安装）：`winreg` 读 MachineGuid、`ctypes`/`wintypes` 调 `netapi32!NetWkstaGetInfo`
+  取工作组、`hashlib.blake2s`、`zlib`（gzip）、`base64`/`json`/`argparse`。
+- Python：3.10+（本项目在 3.13.5 x64 上实测）；代码没用到 3.8 之后的新语法/API，理论 3.8/3.9 也可，
+  未逐一验证。
+- 实测通过的依赖版本：pynacl 1.6.2 / pefile 2024.8.26 / pywinauto 0.6.9 / pywin32 312 / pillow 12.1.0。
+
+一次装齐（含可选的 UI 自动化）：
+
+```powershell
+pip install -r requirements.txt      # 只要注册机+补丁：pip install pefile（或再装 pynacl）
+```
+
 ## 复现步骤
 
-依赖：Python 3.10+，`pip install pynacl pefile`（UI 自动化另需 `pywinauto pywin32 pillow`）。
+依赖见上节「依赖说明」；最省事是 `pip install -r requirements.txt`。
 
 ```powershell
 # 1. 下载官方包（约 19MB）
@@ -105,18 +137,24 @@ curl.exe -L -o Snipaste-2.11.3-x64.zip https://download.snipaste.com/archives/Sn
 Expand-Archive Snipaste-2.11.3-x64.zip -DestinationPath Snipaste-2.11.3-x64
 
 # 2. 打补丁（自动备份 Snipaste.exe.orig）
-python patch/patch_2113.py   # 内部路径按需修改，或看源码 12 行
+python patch/patch_2113.py [Snipaste.exe 路径]   # 省略路径则用脚本内默认值；自动备份 .orig
 
 # 3. 生成本机授权码（自动读 MachineGuid + 工作组，含客户端模拟自检）
 python keygen/kg.py --name YG --email yg@local.test --devices 3
+#    零依赖替代（不用 pynacl，输出等价）：
+#    python keygen/kg_standalone.py --name YG --email yg@local.test --devices 3
 #    输出 JSON + 授权码，存 license_code.txt，末行 [模拟客户端 validate] = 0 (OK) 才算数
 
 # 4. 启动补丁版，托盘菜单 → 解锁专业版 → 离线激活 → 粘贴授权码 → 激活
 # 5. 重启 Snipaste，托盘显示「专业版」即持久化成功
 
-# （可选）全自动：UI 自动化一条龙（需上面的依赖）
-python e2e/activate_auto.py
+# （可选）全自动：UI 自动化一条龙（需 pip install pywinauto pywin32 pillow）
+python e2e/activate_auto.py [Snipaste.exe 所在目录] [license_code.txt 路径]
 ```
+
+> e2e 已知差异：Win11 25H2 的托盘菜单是右键弹出的 `TrayMenu` 窗口（本仓库脚本按左键点击图标 +
+> 溢出区按钮查找，可能报「解锁对话框未弹出」）。手动等价路径：右键托盘 Snipaste 图标 →
+> 「解锁专业版...」→「输入授权码」→「离线激活」→ 粘贴授权码 →「激活」。
 
 ## 激活方案对比（"还有啥更好的办法"）
 
@@ -143,9 +181,11 @@ python e2e/activate_auto.py
 
 ```
 ├── README.md
-├── keygen/kg.py            # 注册机（含客户端 validate 模拟自检）
-├── patch/patch_2113.py     # 特征码补丁器
-├── e2e/activate_auto.py    # UI 自动化全流程（托盘→离线激活→粘码→验证）
+├── requirements.txt        # 依赖清单（按脚本分组注释，含可选 e2e）
+├── keygen/kg.py            # 注册机（PyNaCl 签名版，依赖 pynacl）
+├── keygen/kg_standalone.py # 注册机（零依赖版，内嵌纯 Python Ed25519）
+├── patch/patch_2113.py     # 特征码补丁器（依赖 pefile）
+├── e2e/activate_auto.py    # UI 自动化全流程（可选，依赖 pywinauto/pywin32/pillow）
 ├── docs/analysis.md        # 逆向分析记录（定位方法 + 差异点）
 ```
 

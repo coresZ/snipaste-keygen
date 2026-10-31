@@ -1,0 +1,23 @@
+# Snipaste 2.11.3 keygen / patch —— 生成端依赖清单
+# 补丁后的 Snipaste.exe 运行时不依赖 Python 与任何包；下面全部只在跑脚本的机器上需要。
+#
+# 一次装齐（含可选的 UI 自动化）:
+#   pip install -r requirements.txt
+# 只要注册机 + 补丁:
+#   pip install pynacl pefile
+# 用零依赖注册机 keygen/kg_standalone.py（纯标准库）时，只需:
+#   pip install pefile
+#
+# Python 3.10+（实测 3.13.5 x64）；实测版本见行尾注释。
+
+# --- keygen/kg.py（PyNaCl 版注册机；kg_standalone.py 不需要本行）---
+pynacl>=1.5                # 实测 1.6.2
+
+# --- patch/patch_2113.py（解析 PE 节表，把文件偏移换算成 VA）---
+pefile>=2023.2.7           # 实测 2024.8.26
+
+# --- e2e/activate_auto.py（可选：Windows UI 自动化）---
+# pywinauto 会自动带上 comtypes / pywin32 / six
+pywinauto>=0.6.8           # 实测 0.6.9
+pywin32>=306               # 实测 312；提供 win32clipboard / win32con
+pillow>=9.0                # 实测 12.1.0；仅 ImageGrab 截图取证用
